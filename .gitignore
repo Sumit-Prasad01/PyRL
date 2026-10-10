@@ -19,3 +19,5 @@
 
 # Generated MNIST data files
 /*.mat
+*.exe
+*.obj
