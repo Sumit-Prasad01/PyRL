@@ -6,9 +6,10 @@
 #include "prng.hpp"
 
 struct ActorConfig {
-    u32 input_size  = 76;
-    u32 hidden_size = 128;
-    u32 num_actions = 5;
+    u32  input_size      = 76;
+    u32  hidden_size     = 128;
+    u32  num_actions     = 5;
+    bool use_gather_loss = false;
 };
 
 [[nodiscard]] ModelState* CreateActorModel(Arena& arena, const ActorConfig& config, Prng& rng);

@@ -87,6 +87,41 @@ TEST_CASE("Gradcheck: Softmax followed by the REINFORCE loss", "[gradcheck]")
     ExpectGradientsMatch(f.Build(cost), {logits});
 }
 
+TEST_CASE("Gradcheck: LogSoftmax followed by LogProbLoss", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* logits = f.Leaf(5, 1, true, -2.0f, 2.0f);
+    Var* target = f.Leaf(2, 1, false);
+    SetVal(target, {2.0f, 1.5f}); // action 2, advantage 1.5
+
+    Var* log_probs = Must(ops::LogSoftmax(f.arena, *f.model, logits));
+    Var* cost      = Must(ops::LogProbLoss(f.arena, *f.model, log_probs, target));
+    ExpectGradientsMatch(f.Build(cost), {logits});
+}
+
+TEST_CASE("Gradcheck: CrossEntropy from logits", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* logits = f.Leaf(4, 1, true, -1.5f, 1.5f);
+    Var* target = f.Leaf(2, 1, false);
+    SetVal(target, {1.0f, 0.8f}); // class 1, weight 0.8
+
+    Var* cost = Must(ops::CrossEntropy(f.arena, *f.model, logits, target));
+    ExpectGradientsMatch(f.Build(cost), {logits});
+}
+
+TEST_CASE("Gradcheck: LogSoftmax and CrossEntropy are stable with large logits", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* logits = f.Leaf(3, 1, true);
+    SetVal(logits, {100.0f, 101.5f, 99.0f});
+    Var* target = f.Leaf(2, 1, false);
+    SetVal(target, {1.0f, 1.0f});
+
+    Var* cost = Must(ops::CrossEntropy(f.arena, *f.model, logits, target));
+    ExpectGradientsMatch(f.Build(cost), {logits});
+}
+
 TEST_CASE("Gradcheck: a node consumed by two paths accumulates both gradients", "[gradcheck]")
 {
     // s = relu(x) + x   =>   ds/dx = relu'(x) + 1  (x feeds two consumers)
@@ -164,3 +199,153 @@ TEST_CASE("Gradcheck: the full actor model's cost graph", "[gradcheck][model]")
     }
     REQUIRE(checked);
 }
+
+TEST_CASE("Double precision finite difference gradchecks reach tight tolerance (~1e-7)", "[gradcheck][double]")
+{
+    Arena arena(MiB(4));
+    Prng rng(101, 7);
+    constexpr f64 kEps = 1e-7;
+    constexpr f64 kTol = 1e-7;
+
+    SECTION("MatMul in f64")
+    {
+        Mat64* a = Mat64::Create(arena, 3, 4);
+        Mat64* b = Mat64::Create(arena, 4, 2);
+        a->FillRand(-1.5, 1.5, rng);
+        b->FillRand(-1.5, 1.5, rng);
+
+        Mat64* grad_out = Mat64::Create(arena, 3, 2);
+        grad_out->FillRand(-1.0, 1.0, rng);
+
+        Mat64* grad_a = Mat64::Create(arena, 3, 4);
+        grad_a->Clear();
+        REQUIRE(mat::MatMul<f64>(*grad_a, *grad_out, *b, false, false, true));
+
+        Mat64* out_plus  = Mat64::Create(arena, 3, 2);
+        Mat64* out_minus = Mat64::Create(arena, 3, 2);
+
+        for (u64 i = 0; i < a->Size(); ++i) {
+            const f64 orig = a->data[i];
+            a->data[i] = orig + kEps;
+            REQUIRE(mat::MatMul<f64>(*out_plus, *a, *b, true, false, false));
+            f64 loss_plus = 0.0;
+            for (u64 k = 0; k < out_plus->Size(); ++k) { loss_plus += out_plus->data[k] * grad_out->data[k]; }
+
+            a->data[i] = orig - kEps;
+            REQUIRE(mat::MatMul<f64>(*out_minus, *a, *b, true, false, false));
+            f64 loss_minus = 0.0;
+            for (u64 k = 0; k < out_minus->Size(); ++k) { loss_minus += out_minus->data[k] * grad_out->data[k]; }
+
+            a->data[i] = orig;
+            const f64 num_grad = (loss_plus - loss_minus) / (2.0 * kEps);
+            const f64 analytic = grad_a->data[i];
+            CHECK(std::fabs(num_grad - analytic) <= kTol);
+        }
+    }
+
+    SECTION("Softmax in f64")
+    {
+        Mat64* z = Mat64::Create(arena, 5, 1);
+        z->FillRand(-2.0, 2.0, rng);
+        Mat64* grad_out = Mat64::Create(arena, 5, 1);
+        grad_out->FillRand(-1.0, 1.0, rng);
+
+        Mat64* s = Mat64::Create(arena, 5, 1);
+        REQUIRE(mat::Softmax<f64>(*s, *z));
+
+        Mat64* analytic_grad = Mat64::Create(arena, 5, 1);
+        analytic_grad->Clear();
+        REQUIRE(mat::SoftmaxAddGrad<f64>(*analytic_grad, *s, *grad_out));
+
+        Mat64* s_plus  = Mat64::Create(arena, 5, 1);
+        Mat64* s_minus = Mat64::Create(arena, 5, 1);
+
+        for (u64 i = 0; i < z->Size(); ++i) {
+            const f64 orig = z->data[i];
+            z->data[i] = orig + kEps;
+            REQUIRE(mat::Softmax<f64>(*s_plus, *z));
+            f64 loss_plus = 0.0;
+            for (u64 k = 0; k < 5; ++k) { loss_plus += s_plus->data[k] * grad_out->data[k]; }
+
+            z->data[i] = orig - kEps;
+            REQUIRE(mat::Softmax<f64>(*s_minus, *z));
+            f64 loss_minus = 0.0;
+            for (u64 k = 0; k < 5; ++k) { loss_minus += s_minus->data[k] * grad_out->data[k]; }
+
+            z->data[i] = orig;
+            const f64 num_grad = (loss_plus - loss_minus) / (2.0 * kEps);
+            const f64 analytic = analytic_grad->data[i];
+            CHECK(std::fabs(num_grad - analytic) <= kTol);
+        }
+    }
+
+    SECTION("LogSoftmax in f64")
+    {
+        Mat64* z = Mat64::Create(arena, 4, 1);
+        z->FillRand(-3.0, 3.0, rng);
+        Mat64* grad_out = Mat64::Create(arena, 4, 1);
+        grad_out->FillRand(-1.0, 1.0, rng);
+
+        Mat64* ls = Mat64::Create(arena, 4, 1);
+        REQUIRE(mat::LogSoftmax<f64>(*ls, *z));
+
+        Mat64* analytic_grad = Mat64::Create(arena, 4, 1);
+        analytic_grad->Clear();
+        REQUIRE(mat::LogSoftmaxAddGrad<f64>(*analytic_grad, *ls, *grad_out));
+
+        Mat64* ls_plus  = Mat64::Create(arena, 4, 1);
+        Mat64* ls_minus = Mat64::Create(arena, 4, 1);
+
+        for (u64 i = 0; i < z->Size(); ++i) {
+            const f64 orig = z->data[i];
+            z->data[i] = orig + kEps;
+            REQUIRE(mat::LogSoftmax<f64>(*ls_plus, *z));
+            f64 loss_plus = 0.0;
+            for (u64 k = 0; k < 4; ++k) { loss_plus += ls_plus->data[k] * grad_out->data[k]; }
+
+            z->data[i] = orig - kEps;
+            REQUIRE(mat::LogSoftmax<f64>(*ls_minus, *z));
+            f64 loss_minus = 0.0;
+            for (u64 k = 0; k < 4; ++k) { loss_minus += ls_minus->data[k] * grad_out->data[k]; }
+
+            z->data[i] = orig;
+            const f64 num_grad = (loss_plus - loss_minus) / (2.0 * kEps);
+            const f64 analytic = analytic_grad->data[i];
+            CHECK(std::fabs(num_grad - analytic) <= kTol);
+        }
+    }
+
+    SECTION("CrossEntropy in f64")
+    {
+        Mat64* z = Mat64::Create(arena, 4, 1);
+        z->FillRand(-2.0, 2.0, rng);
+        Mat64* target = Mat64::Create(arena, 2, 1);
+        target->data[0] = 2.0; // class 2
+        target->data[1] = 1.75; // weight 1.75
+
+        Mat64* grad_out = Mat64::Create(arena, 1, 1);
+        grad_out->data[0] = 1.0;
+
+        Mat64* analytic_grad = Mat64::Create(arena, 4, 1);
+        analytic_grad->Clear();
+        REQUIRE(mat::CrossEntropyAddGrad<f64>(*analytic_grad, *z, *target, *grad_out));
+
+        Mat64* loss_plus  = Mat64::Create(arena, 1, 1);
+        Mat64* loss_minus = Mat64::Create(arena, 1, 1);
+
+        for (u64 i = 0; i < z->Size(); ++i) {
+            const f64 orig = z->data[i];
+            z->data[i] = orig + kEps;
+            REQUIRE(mat::CrossEntropy<f64>(*loss_plus, *z, *target));
+
+            z->data[i] = orig - kEps;
+            REQUIRE(mat::CrossEntropy<f64>(*loss_minus, *z, *target));
+
+            z->data[i] = orig;
+            const f64 num_grad = (loss_plus->data[0] - loss_minus->data[0]) / (2.0 * kEps);
+            const f64 analytic = analytic_grad->data[i];
+            CHECK(std::fabs(num_grad - analytic) <= kTol);
+        }
+    }
+}
+

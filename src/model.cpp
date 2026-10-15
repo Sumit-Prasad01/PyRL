@@ -73,8 +73,14 @@ ModelState* CreateActorModel(Arena& arena, const ActorConfig& cfg, Prng& rng)
 
     model->output = Require(ops::Softmax(arena, *model, z2), "softmax");
 
-    model->advantage = Require(Var::Create(arena, *model, cfg.num_actions, 1), "advantage");
-    model->cost = Require(ops::ReinforceLoss(arena, *model, model->output, model->advantage), "reinforce loss");
+    if (cfg.use_gather_loss) {
+        Var* log_probs   = Require(ops::LogSoftmax(arena, *model, z2), "log_softmax");
+        model->advantage = Require(Var::Create(arena, *model, cfg.num_actions, 1), "advantage");
+        model->cost      = Require(ops::LogProbLoss(arena, *model, log_probs, model->advantage), "log prob loss");
+    } else {
+        model->advantage = Require(Var::Create(arena, *model, cfg.num_actions, 1), "advantage");
+        model->cost      = Require(ops::ReinforceLoss(arena, *model, model->output, model->advantage), "reinforce loss");
+    }
 
     model->forward_graph = Graph::Build(arena, *model, model->output);
     model->cost_graph    = Graph::Build(arena, *model, model->cost);

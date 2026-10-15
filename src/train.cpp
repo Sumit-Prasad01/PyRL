@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "timer.hpp"
+
 namespace {
 
 void Check(bool ok, const char* msg)
@@ -29,6 +31,7 @@ void Validate(const ModelState& m, const SnakeEnv& env, const TrainConfig& cfg)
 
 void CollectTrajectory(ModelState& model, SnakeEnv& env, u32 episode_len, Prng& rng, Trajectory& traj)
 {
+    RL_PROFILE_SCOPE("Rollout::CollectTrajectory");
     env.Reset();
     traj.transitions.clear();
 
@@ -102,6 +105,7 @@ void ZeroParameterGrads(const Graph& graph)
 
 void SgdStep(const Graph& graph, f32 grad_scale)
 {
+    RL_PROFILE_SCOPE("Optimizer::SgdStep");
     for (Var* v : graph.Vars()) {
         if (!v->IsParameter() || !v->RequiresGrad()) { continue; }
         v->grad->Scale(grad_scale);
@@ -134,6 +138,7 @@ void Train(ModelState& model, SnakeEnv& env, const TrainConfig& cfg, Prng& rng,
     for (Trajectory& t : buffer) { t.transitions.reserve(cfg.episode_len); }
 
     for (u32 epoch = 0; epoch < cfg.epochs; epoch++) {
+        RL_PROFILE_SCOPE("Training::Epoch");
         u32 foods_eaten = 0;
         for (Trajectory& traj : buffer) {
             CollectTrajectory(model, env, cfg.episode_len, rng, traj);
@@ -144,16 +149,19 @@ void Train(ModelState& model, SnakeEnv& env, const TrainConfig& cfg, Prng& rng,
 
         ZeroParameterGrads(model.cost_graph);
 
-        for (const Trajectory& traj : buffer) {
-            for (const Transition& tr : traj.transitions) {
-                env.EncodeState(*model.input->val, tr.state, tr.food_state, tr.pov);
+        {
+            RL_PROFILE_SCOPE("Training::BackwardPasses");
+            for (const Trajectory& traj : buffer) {
+                for (const Transition& tr : traj.transitions) {
+                    env.EncodeState(*model.input->val, tr.state, tr.food_state, tr.pov);
 
-                model.advantage->val->Clear();
-                const f32 advantage = (tr.ret - stats.mean) / (stats.stddev + 1e-8f);
-                model.advantage->val->Span()[static_cast<u32>(tr.action)] = advantage;
+                    model.advantage->val->Clear();
+                    const f32 advantage = (tr.ret - stats.mean) / (stats.stddev + 1e-8f);
+                    model.advantage->val->Span()[static_cast<u32>(tr.action)] = advantage;
 
-                model.cost_graph.Forward();
-                Check(model.cost_graph.Backward(), "backward pass failed");
+                    model.cost_graph.Forward();
+                    Check(model.cost_graph.Backward(), "backward pass failed");
+                }
             }
         }
 

@@ -225,6 +225,64 @@ TEST_CASE("Training is bit-for-bit reproducible for fixed seeds", "[train][deter
     CHECK(differs_from_c);   // the seed actually matters
 }
 
+TEST_CASE("Log-probability gather loss produces equivalent training dynamics", "[train][gather_loss]")
+{
+    TrainConfig cfg = SmallConfig();
+
+    auto run_with_gather = [&](bool use_gather) {
+        Arena arena(MiB(4));
+        SnakeEnv env(36, 11);
+        ActorConfig ac;
+        ac.input_size      = env.InputSize();
+        ac.hidden_size     = 16;
+        ac.use_gather_loss = use_gather;
+        Prng init_rng(1, 1), sample_rng(2, 2);
+        ModelState* model = CreateActorModel(arena, ac, init_rng);
+
+        std::vector<EpochStats> log;
+        Train(*model, env, cfg, sample_rng, [&](const EpochStats& s) { log.push_back(s); });
+        return log;
+    };
+
+    const auto base   = run_with_gather(false);
+    const auto gather = run_with_gather(true);
+
+    REQUIRE(base.size() == gather.size());
+    for (std::size_t i = 0; i < base.size(); ++i) {
+        CHECK(std::fabs(base[i].average_return - gather[i].average_return) < 1e-4f);
+        CHECK(base[i].foods_eaten == gather[i].foods_eaten);
+        CHECK(base[i].samples == gather[i].samples);
+    }
+}
+
+TEST_CASE("Golden run: first 5 epochs match exact reference statistics", "[train][golden]")
+{
+    TrainConfig cfg;
+    cfg.epochs       = 5;
+    cfg.rollout_size = 8;
+    cfg.episode_len  = 30;
+
+    const auto log = RunTraining(1, 2, cfg);
+    REQUIRE(log.size() == 5);
+
+    // Reference values established on verified baseline (seed 1, 2)
+    // Any change to mathematical operators, RNG, or SGD update will trigger regression failure
+    constexpr f32 expected_returns[5] = {
+        0.317930f,
+        -6.743400f,
+        -6.685540f,
+        -8.997860f,
+        -6.771310f,
+    };
+    constexpr u32 expected_foods[5] = {4, 1, 1, 0, 1};
+
+    for (u32 i = 0; i < 5; ++i) {
+        CHECK(log[i].epoch == i);
+        CHECK(std::fabs(log[i].average_return - expected_returns[i]) < 1e-5f);
+        CHECK(log[i].foods_eaten == expected_foods[i]);
+    }
+}
+
 // Statistical: REINFORCE is noisy. This asserts only that late returns beat
 // early returns. If it flakes on your machine, widen the windows or raise the
 // epoch count rather than loosening it to a tautology.

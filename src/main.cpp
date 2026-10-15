@@ -5,7 +5,7 @@
 #include "arena.hpp"
 #include "env.hpp"
 #include "model.hpp"
-#include "prng.hpp"
+#include "timer.hpp"
 #include "train.hpp"
 
 int main() 
@@ -28,6 +28,8 @@ int main()
                 "Epoch %u | Average return: %.3f | Foods: %u | Samples: %u | Return std: %.3f\n",
                 s.epoch, s.average_return, s.foods_eaten, s.samples, s.return_std);
         });
+
+        rl::ProfileRegistry::Global().PrintSummary();
         return EXIT_SUCCESS;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "fatal: %s\n", e.what());

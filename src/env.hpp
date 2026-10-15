@@ -1,9 +1,8 @@
 #pragma once
 
 #include "base.hpp"
+#include "mat.hpp"
 #include "prng.hpp"
-
-struct Mat;
 
 enum class Action : u8 {
     Left  = 0,

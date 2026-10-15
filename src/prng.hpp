@@ -59,6 +59,14 @@ public:
         return static_cast<f32>(Next() >> 8) * (1.0f / 16777216.0f); // 2^-24
     }
 
+    // Uniform f64 in [0, 1). Uses 53 bits (the full f64 mantissa) from two draws.
+    constexpr f64 NextDouble() noexcept
+    {
+        const u64 high = static_cast<u64>(Next()) << 21;
+        const u64 low  = static_cast<u64>(Next()) >> 11;
+        return static_cast<f64>(high | low) * (1.0 / 9007199254740992.0); // 2^-53
+    }
+
     // UniformRandomBitGenerator interface
     constexpr result_type operator()() noexcept { return Next(); }
     static constexpr result_type min() noexcept { return std::numeric_limits<u32>::min(); }

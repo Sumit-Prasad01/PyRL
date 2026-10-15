@@ -15,65 +15,129 @@ class Prng;
 // - Copying a Mat copies the view (shallow), not the elements.
 // - Trivially destructible, so it can live inside an Arena.
 
-struct Mat {
+template <typename T = f32>
+struct BasicMat {
     u32 rows;
     u32 cols;
-    f32* data;
+    T*  data;
 
-    constexpr Mat(u32 r, u32 c, f32* d) noexcept : rows(r), cols(c), data(d) {}
+    BasicMat() noexcept = default;
+    constexpr BasicMat(u32 r, u32 c, T* d) noexcept : rows(r), cols(c), data(d) {}
 
-    [[nodiscard]] static Mat* Create(Arena& arena, u32 rows, u32 cols) noexcept;
+    [[nodiscard]] static BasicMat* Create(Arena& arena, u32 rows, u32 cols) noexcept
+    {
+        BasicMat* m = arena.PushStruct<BasicMat>();
+        if (m == nullptr) { return nullptr; }
+        m->rows = rows;
+        m->cols = cols;
+        m->data = arena.PushArray<T>(u64{rows} * cols);
+        if (m->data == nullptr && rows > 0 && cols > 0) { return nullptr; }
+        return m;
+    }
 
     [[nodiscard]] constexpr u64 Size() const noexcept { return u64{rows} * cols; }
 
-    [[nodiscard]] std::span<f32>         Span() noexcept          { return {data, Size()}; }
-    [[nodiscard]] std::span<const f32>   Span() const noexcept    { return {data, Size()}; }
+    [[nodiscard]] std::span<T>         Span() noexcept          { return {data, Size()}; }
+    [[nodiscard]] std::span<const T>   Span() const noexcept    { return {data, Size()}; }
 
-    [[nodiscard]] f32& At(u32 r, u32 c) noexcept
+    [[nodiscard]] T& At(u32 r, u32 c) noexcept
     {
         assert(r < rows && c < cols);
         return data[u64{r} * cols + c];
     }
-    [[nodiscard]] const f32& At(u32 r, u32 c) const noexcept
+    [[nodiscard]] const T& At(u32 r, u32 c) const noexcept
     {
         assert(r < rows && c < cols);
         return data[u64{r} * cols + c];
     }
-    [[nodiscard]] constexpr bool SameShape(const Mat& o) const noexcept
+    [[nodiscard]] constexpr bool SameShape(const BasicMat& o) const noexcept
     {
         return rows == o.rows && cols == o.cols;
     }
 
-    void Clear() noexcept;
-    void Fill(f32 x) noexcept;
-    void Scale(f32 s) noexcept;
+    void Clear() noexcept
+    {
+        if (data != nullptr) {
+            std::fill_n(data, Size(), T{0});
+        }
+    }
+    void Fill(T x) noexcept
+    {
+        if (data != nullptr) {
+            std::fill_n(data, Size(), x);
+        }
+    }
+    void Scale(T s) noexcept
+    {
+        if (data != nullptr) {
+            for (u64 i = 0, n = Size(); i < n; ++i) {
+                data[i] *= s;
+            }
+        }
+    }
 
-    void FillRand(f32 lower, f32 upper);
-    void FillRand(f32 lower, f32 upper, Prng& rng);
+    void FillRand(T lower, T upper);
+    void FillRand(T lower, T upper, Prng& rng);
 };
+
+using Mat   = BasicMat<f32>;
+using Mat64 = BasicMat<f64>;
 
 namespace mat {
 
-[[nodiscard]] bool Add(Mat& out, const Mat& a, const Mat& b) noexcept;
-[[nodiscard]] bool Sub(Mat& out, const Mat& a, const Mat& b) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool Add(BasicMat<T>& out, const BasicMat<T>& a, const BasicMat<T>& b) noexcept;
 
-[[nodiscard]] bool MatMul(Mat& out, const Mat& a, const Mat& b,
+template <typename T = f32>
+[[nodiscard]] bool Sub(BasicMat<T>& out, const BasicMat<T>& a, const BasicMat<T>& b) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool MatMul(BasicMat<T>& out, const BasicMat<T>& a, const BasicMat<T>& b,
                           bool zero_out = true,
                           bool transpose_a = false,
                           bool transpose_b = false) noexcept;
 
-[[nodiscard]] bool Relu(Mat& out, const Mat& in) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool Relu(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
 
-[[nodiscard]] bool Softmax(Mat& out, const Mat& in) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool Softmax(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
 
-[[nodiscard]] bool ReinforceLoss(Mat& out, const Mat& probs,
-                                 const Mat& advantages) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool LogSoftmax(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
 
-[[nodiscard]] bool ReinforceAddGrad(Mat& prob_grads, const Mat& probs,
-                                    const Mat& rt, const Mat& grad) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool ReinforceLoss(BasicMat<T>& out, const BasicMat<T>& probs,
+                                 const BasicMat<T>& advantages) noexcept;
 
-[[nodiscard]] bool ReluAddGrad(Mat& out, const Mat& in, const Mat& grad) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool LogProbLoss(BasicMat<T>& out, const BasicMat<T>& log_probs,
+                               const BasicMat<T>& target) noexcept;
 
-[[nodiscard]] bool SoftmaxAddGrad(Mat& out, const Mat& softmax_out,
-                                  const Mat& grad) noexcept;
+template <typename T = f32>
+[[nodiscard]] bool CrossEntropy(BasicMat<T>& out, const BasicMat<T>& logits,
+                                const BasicMat<T>& target) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool ReinforceAddGrad(BasicMat<T>& prob_grads, const BasicMat<T>& probs,
+                                    const BasicMat<T>& rt, const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LogProbLossAddGrad(BasicMat<T>& log_prob_grads, const BasicMat<T>& target,
+                                      const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool CrossEntropyAddGrad(BasicMat<T>& out, const BasicMat<T>& logits,
+                                       const BasicMat<T>& target, const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool ReluAddGrad(BasicMat<T>& out, const BasicMat<T>& in, const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool SoftmaxAddGrad(BasicMat<T>& out, const BasicMat<T>& softmax_out,
+                                  const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LogSoftmaxAddGrad(BasicMat<T>& out, const BasicMat<T>& log_softmax_out,
+                                     const BasicMat<T>& grad) noexcept;
 }

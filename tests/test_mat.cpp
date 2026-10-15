@@ -331,4 +331,224 @@ TEST_CASE("Gradient kernels accumulate into their output", "[mat][grad]")
         REQUIRE(mat::SoftmaxAddGrad(*out, *s, *grad));
         ExpectMatNear(*out, {0.25f, -0.25f}, 1e-6f);
     }
+
+    SECTION("LogSoftmaxAddGrad: sum of grad scaled by p")
+    {
+        Mat* ls   = MakeMat(arena, 2, 1, {std::log(0.3f), std::log(0.7f)});
+        Mat* grad = MakeMat(arena, 2, 1, {2.0f, 2.0f}); // sum_grad = 4.0
+        Mat* out  = MakeMat(arena, 2, 1);
+        REQUIRE(mat::LogSoftmaxAddGrad(*out, *ls, *grad));
+        // out_k = grad_k - p_k * sum_grad:
+        // out[0] = 2.0 - 0.3 * 4.0 = 0.8
+        // out[1] = 2.0 - 0.7 * 4.0 = -0.8
+        ExpectMatNear(*out, {0.8f, -0.8f}, 1e-5f);
+    }
 }
+
+TEST_CASE("LogSoftmax", "[mat]")
+{
+    Arena arena(KiB(4));
+
+    SECTION("known values match log(softmax(x))")
+    {
+        Mat* in      = MakeMat(arena, 3, 1, {0.0f, 1.0f, 2.0f});
+        Mat* sm_out  = MakeMat(arena, 3, 1);
+        Mat* lsm_out = MakeMat(arena, 3, 1);
+
+        REQUIRE(mat::Softmax(*sm_out, *in));
+        REQUIRE(mat::LogSoftmax(*lsm_out, *in));
+
+        for (u64 i = 0; i < 3; ++i) {
+            CHECK(std::fabs(lsm_out->data[i] - std::log(sm_out->data[i])) < 1e-5f);
+        }
+    }
+
+    SECTION("is numerically stable for extreme logits")
+    {
+        Mat* in_large = MakeMat(arena, 3, 1, {1000.0f, 1001.0f, 1002.0f});
+        Mat* out_large = MakeMat(arena, 3, 1);
+        REQUIRE(mat::LogSoftmax(*out_large, *in_large));
+        for (f32 v : out_large->Span()) {
+            CHECK(std::isfinite(v));
+        }
+
+        Mat* in_small = MakeMat(arena, 3, 1, {-1002.0f, -1001.0f, -1000.0f});
+        Mat* out_small = MakeMat(arena, 3, 1);
+        REQUIRE(mat::LogSoftmax(*out_small, *in_small));
+        for (f32 v : out_small->Span()) {
+            CHECK(std::isfinite(v));
+        }
+    }
+
+    SECTION("shift invariance: LogSoftmax(x + c) == LogSoftmax(x)")
+    {
+        Mat* x1  = MakeMat(arena, 3, 1, {1.0f, 2.0f, 3.0f});
+        Mat* x2  = MakeMat(arena, 3, 1, {101.0f, 102.0f, 103.0f});
+        Mat* y1  = MakeMat(arena, 3, 1);
+        Mat* y2  = MakeMat(arena, 3, 1);
+
+        REQUIRE(mat::LogSoftmax(*y1, *x1));
+        REQUIRE(mat::LogSoftmax(*y2, *x2));
+
+        for (u64 i = 0; i < 3; ++i) {
+            CHECK(std::fabs(y1->data[i] - y2->data[i]) < 1e-5f);
+        }
+    }
+}
+
+TEST_CASE("LogProbLoss and CrossEntropy", "[mat][loss]")
+{
+    Arena arena(KiB(4));
+
+    SECTION("LogProbLoss with action index and advantage")
+    {
+        Mat* log_probs = MakeMat(arena, 4, 1, {-2.0f, -0.5f, -1.5f, -3.0f});
+        Mat* target    = MakeMat(arena, 2, 1, {1.0f, 2.5f}); // action 1, adv 2.5
+        Mat* out       = MakeMat(arena, 1, 1);
+
+        REQUIRE(mat::LogProbLoss(*out, *log_probs, *target));
+        // L = -log_probs[1] * 2.5 = -(-0.5) * 2.5 = 1.25
+        ExpectMatNear(*out, {1.25f}, 1e-6f);
+
+        Mat* grad     = MakeMat(arena, 1, 1, {1.0f});
+        Mat* lp_grads = MakeMat(arena, 4, 1, {0.0f, 0.0f, 0.0f, 0.0f});
+        REQUIRE(mat::LogProbLossAddGrad(*lp_grads, *target, *grad));
+        // dL/d(log_probs[1]) = -adv * grad = -2.5
+        ExpectMatNear(*lp_grads, {0.0f, -2.5f, 0.0f, 0.0f}, 1e-6f);
+    }
+
+    SECTION("CrossEntropy with logits and target class")
+    {
+        Mat* logits = MakeMat(arena, 3, 1, {0.0f, 1.0f, 2.0f});
+        Mat* target = MakeMat(arena, 2, 1, {2.0f, 1.0f}); // target class 2, weight 1.0
+        Mat* out    = MakeMat(arena, 1, 1);
+
+        REQUIRE(mat::CrossEntropy(*out, *logits, *target));
+        // Softmax(logits) = [0.09003, 0.24473, 0.66524]
+        // CE = -log(0.66524) = 0.407606
+        ExpectMatNear(*out, {0.407606f}, 1e-5f);
+
+        Mat* grad        = MakeMat(arena, 1, 1, {1.0f});
+        Mat* logit_grads = MakeMat(arena, 3, 1, {0.0f, 0.0f, 0.0f});
+        REQUIRE(mat::CrossEntropyAddGrad(*logit_grads, *logits, *target, *grad));
+        // dCE/dz_k = p_k - delta_{k, 2}
+        // [0.09003, 0.24473, 0.66524 - 1] = [0.09003, 0.24473, -0.33476]
+        ExpectMatNear(*logit_grads, {0.09003057f, 0.24472847f, -0.33475904f}, 1e-5f);
+    }
+}
+
+TEST_CASE("Property-based algebraic identities", "[mat][properties]")
+{
+    Prng rng(1337, 42);
+    Arena arena(MiB(8));
+
+    SECTION("MatMul transpose identity: (A * B)^T == B^T * A^T")
+    {
+        for (int trial = 0; trial < 25; ++trial) {
+            const u32 m = rng.NextBelow(10) + 1;
+            const u32 k = rng.NextBelow(10) + 1;
+            const u32 n = rng.NextBelow(10) + 1;
+
+            Mat* a = RandomMat(arena, rng, m, k, -2.0f, 2.0f);
+            Mat* b = RandomMat(arena, rng, k, n, -2.0f, 2.0f);
+
+            Mat* ab = MakeMat(arena, m, n);
+            REQUIRE(mat::MatMul(*ab, *a, *b, true, false, false));
+
+            // Compute B^T * A^T with output shape (n, m)
+            Mat* bt_at = MakeMat(arena, n, m);
+            REQUIRE(mat::MatMul(*bt_at, *b, *a, true, true, true));
+
+            for (u32 r = 0; r < m; ++r) {
+                for (u32 c = 0; c < n; ++c) {
+                    CHECK(std::fabs(ab->At(r, c) - bt_at->At(c, r)) < 1e-5f);
+                }
+            }
+        }
+    }
+
+    SECTION("MatMul distributive law: A * (B + C) == A * B + A * C")
+    {
+        for (int trial = 0; trial < 25; ++trial) {
+            const u32 m = rng.NextBelow(8) + 1;
+            const u32 k = rng.NextBelow(8) + 1;
+            const u32 n = rng.NextBelow(8) + 1;
+
+            Mat* a = RandomMat(arena, rng, m, k, -1.5f, 1.5f);
+            Mat* b = RandomMat(arena, rng, k, n, -1.5f, 1.5f);
+            Mat* c = RandomMat(arena, rng, k, n, -1.5f, 1.5f);
+
+            Mat* b_plus_c = MakeMat(arena, k, n);
+            REQUIRE(mat::Add(*b_plus_c, *b, *c));
+
+            Mat* lhs = MakeMat(arena, m, n);
+            REQUIRE(mat::MatMul(*lhs, *a, *b_plus_c, true, false, false));
+
+            Mat* ab = MakeMat(arena, m, n);
+            REQUIRE(mat::MatMul(*ab, *a, *b, true, false, false));
+
+            Mat* ac = MakeMat(arena, m, n);
+            REQUIRE(mat::MatMul(*ac, *a, *c, true, false, false));
+
+            Mat* rhs = MakeMat(arena, m, n);
+            REQUIRE(mat::Add(*rhs, *ab, *ac));
+
+            for (u64 i = 0; i < lhs->Size(); ++i) {
+                CHECK(std::fabs(lhs->data[i] - rhs->data[i]) < 1e-4f);
+            }
+        }
+    }
+
+    SECTION("Relu idempotence: Relu(Relu(X)) == Relu(X)")
+    {
+        for (int trial = 0; trial < 20; ++trial) {
+            const u32 r = rng.NextBelow(12) + 1;
+            const u32 c = rng.NextBelow(12) + 1;
+            Mat* x  = RandomMat(arena, rng, r, c, -10.0f, 10.0f);
+            Mat* y1 = MakeMat(arena, r, c);
+            Mat* y2 = MakeMat(arena, r, c);
+
+            REQUIRE(mat::Relu(*y1, *x));
+            REQUIRE(mat::Relu(*y2, *y1));
+
+            for (u64 i = 0; i < x->Size(); ++i) {
+                CHECK(y1->data[i] == y2->data[i]);
+            }
+        }
+    }
+
+    SECTION("Softmax sum-to-one and non-negativity across random shapes")
+    {
+        for (int trial = 0; trial < 25; ++trial) {
+            const u32 r = rng.NextBelow(15) + 1;
+            Mat* x = RandomMat(arena, rng, r, 1, -20.0f, 20.0f);
+            Mat* p = MakeMat(arena, r, 1);
+
+            REQUIRE(mat::Softmax(*p, *x));
+            CHECK(std::fabs(SumOf(*p) - 1.0) < 1e-5);
+            for (f32 prob : p->Span()) {
+                CHECK(prob >= 0.0f);
+                CHECK(prob <= 1.0f);
+            }
+        }
+    }
+
+    SECTION("Softmax and LogSoftmax consistency: exp(LogSoftmax(x)) == Softmax(x)")
+    {
+        for (int trial = 0; trial < 25; ++trial) {
+            const u32 r = rng.NextBelow(10) + 1;
+            Mat* x = RandomMat(arena, rng, r, 1, -15.0f, 15.0f);
+            Mat* p = MakeMat(arena, r, 1);
+            Mat* lp = MakeMat(arena, r, 1);
+
+            REQUIRE(mat::Softmax(*p, *x));
+            REQUIRE(mat::LogSoftmax(*lp, *x));
+
+            for (u32 i = 0; i < r; ++i) {
+                CHECK(std::fabs(std::exp(lp->data[i]) - p->data[i]) < 1e-5f);
+            }
+        }
+    }
+}
+
+

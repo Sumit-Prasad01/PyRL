@@ -243,3 +243,42 @@ TEST_CASE("Backward refuses graphs that cannot be differentiated", "[autograd][b
         CHECK_FALSE(g.Backward());
     }
 }
+
+TEST_CASE("Graph::Build scales linearly on a large computation graph", "[autograd][graph]")
+{
+    // Build a 500-layer deep and branched DAG to verify linear DFS post-order ordering.
+    GraphFixture f(42, MiB(32));
+    Var* cur = f.Leaf(2, 2, true);
+    Var* bias = f.Leaf(2, 2, true);
+    cur->val->Fill(0.01f);
+    bias->val->Fill(0.001f);
+
+    constexpr u32 kDepth = 500;
+    for (u32 i = 0; i < kDepth; ++i) {
+        Var* next = Must(ops::Add(f.arena, *f.model, cur, bias));
+        cur = Must(ops::Relu(f.arena, *f.model, next));
+    }
+
+    const Graph g = f.Build(cur);
+    REQUIRE(g.size == 2 + kDepth * 2);
+    CHECK(g.vars[g.size - 1] == cur);
+
+    // Verify topological invariance: all dependencies precede their consumers
+    std::unordered_map<const Var*, u32> pos;
+    for (u32 i = 0; i < g.size; ++i) {
+        const bool inserted = pos.emplace(g.vars[i], i).second;
+        CHECK(inserted); // No duplicates
+    }
+    for (u32 i = 0; i < g.size; ++i) {
+        const Var* v = g.vars[i];
+        for (u32 k = 0; k < v->NumInputs(); ++k) {
+            REQUIRE(pos.contains(v->inputs[k]));
+            CHECK(pos[v->inputs[k]] < i);
+        }
+    }
+
+    // Verify forward and backward execute without stack overflow
+    g.Forward();
+    REQUIRE(g.Backward());
+}
+

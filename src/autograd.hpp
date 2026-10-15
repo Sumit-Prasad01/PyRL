@@ -48,10 +48,13 @@ struct VarType {
 namespace var_type {
 extern const VarType Relu;
 extern const VarType Softmax;
+extern const VarType LogSoftmax;
 extern const VarType Add;
 extern const VarType Sub;
 extern const VarType MatMul;
 extern const VarType ReinforceLoss;
+extern const VarType LogProbLoss;
+extern const VarType CrossEntropy;
 }
 
 struct Var {
@@ -105,10 +108,13 @@ namespace ops {
 
 [[nodiscard]] Var* Relu(Arena& arena, ModelState& model, Var* input);
 [[nodiscard]] Var* Softmax(Arena& arena, ModelState& model, Var* input);
+[[nodiscard]] Var* LogSoftmax(Arena& arena, ModelState& model, Var* input);
 [[nodiscard]] Var* Add(Arena& arena, ModelState& model, Var* a, Var* b);
 [[nodiscard]] Var* Sub(Arena& arena, ModelState& model, Var* a, Var* b);
 [[nodiscard]] Var* MatMul(Arena& arena, ModelState& model, Var* a, Var* b);
 [[nodiscard]] Var* ReinforceLoss(Arena& arena, ModelState& model, Var* probs, Var* rt);
+[[nodiscard]] Var* LogProbLoss(Arena& arena, ModelState& model, Var* log_probs, Var* target);
+[[nodiscard]] Var* CrossEntropy(Arena& arena, ModelState& model, Var* logits, Var* target);
 
 }
 
