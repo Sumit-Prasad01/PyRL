@@ -4,7 +4,6 @@
 #include <cassert>
 #include <vector>
 
-
 namespace {
 
 inline void MustSucceed([[maybe_unused]] bool ok) noexcept
@@ -12,28 +11,24 @@ inline void MustSucceed([[maybe_unused]] bool ok) noexcept
     assert(ok && "autograd kernel shape mismatch: graph invariant broken");
 }
 
-
 std::optional<VarShape> ShapeSame(const Var* a, const Var* b)
 {
     if (a == nullptr) { return std::nullopt; }
-    if (b != nullptr && !a->val->ShapeSame(*b->val))  { return std::nullopt; }
+    if (b != nullptr && !a->val->SameShape(*b->val)) { return std::nullopt; }
     return VarShape{a->val->rows, a->val->cols};
 }
 
-
-std::optional<VarShape> ShapeMatMul(const Var* a, const Var * b)
+std::optional<VarShape> ShapeMatMul(const Var* a, const Var* b)
 {
-    if (a == nullptr || b == nullptr)  { return std::nullopt; }
-    if (a->val->cols != b->val->rows)  { return std::nullopt; }
+    if (a == nullptr || b == nullptr) { return std::nullopt; }
+    if (a->val->cols != b->val->rows) { return std::nullopt; }
     return VarShape{a->val->rows, b->val->cols};
 }
-
 
 void ReluForward(Var& v) 
 {
     MustSucceed(mat::Relu(*v.val, *v.inputs[0]->val));
 }
-
 
 void ReluBackward(Var& v) 
 {
@@ -43,12 +38,10 @@ void ReluBackward(Var& v)
     }
 }
 
-
 void SoftmaxForward(Var& v) 
 {
     MustSucceed(mat::Softmax(*v.val, *v.inputs[0]->val));
 }
-
 
 void SoftmaxBackward(Var& v) 
 {
@@ -58,12 +51,10 @@ void SoftmaxBackward(Var& v)
     }
 }
 
-
-void AddForward(Var&, v) 
+void AddForward(Var& v) 
 {
     MustSucceed(mat::Add(*v.val, *v.inputs[0]->val, *v.inputs[1]->val));
 }
-
 
 void AddBackward(Var& v)
 {
@@ -73,12 +64,10 @@ void AddBackward(Var& v)
     if (b->RequiresGrad()) { MustSucceed(mat::Add(*b->grad, *b->grad, *v.grad)); }
 }
 
-
 void SubForward(Var& v)
 {
     MustSucceed(mat::Sub(*v.val, *v.inputs[0]->val, *v.inputs[1]->val));
 }
-
 
 void SubBackward(Var& v) 
 {
@@ -88,12 +77,11 @@ void SubBackward(Var& v)
     if (b->RequiresGrad()) { MustSucceed(mat::Sub(*b->grad, *b->grad, *v.grad)); }
 }
 
-
 void MatMulForward(Var& v) 
 {
-    MustSucceed(mat::MatMul(*v.val, *v.inputs[0]->val, **v.inputs[1]->val, /*zero_out=*/true, /*transpose_a=*/false, /*transpose_b=*/false));
+    MustSucceed(mat::MatMul(*v.val, *v.inputs[0]->val, *v.inputs[1]->val,
+                            /*zero_out=*/true, /*transpose_a=*/false, /*transpose_b=*/false));
 }
-
 
 void MatMulBackward(Var& v) 
 {
@@ -101,22 +89,22 @@ void MatMulBackward(Var& v)
     Var* b = v.inputs[1];
 
     if (a->RequiresGrad()) {
-        MustSucceed(mat::MatMul(*a->grad, *v.grad, *b->val, /*zero_out=*/false, /*transpose_a=*/false, /*transpose_b=*/true));
+        MustSucceed(mat::MatMul(*a->grad, *v.grad, *b->val,
+                                /*zero_out=*/false, /*transpose_a=*/false, /*transpose_b=*/true));
     }
 
     if (b->RequiresGrad()) {
-        MustSucceed(mat::MatMul(*b->grad, *a->val, *v.grad, /*zero_out=*/false, /*transpose_a=*/true, /*transpose_b=*/false));
+        MustSucceed(mat::MatMul(*b->grad, *a->val, *v.grad,
+                                /*zero_out=*/false, /*transpose_a=*/true, /*transpose_b=*/false));
     }
 }
-
 
 void ReinforceForward(Var& v)
 {
     MustSucceed(mat::ReinforceLoss(*v.val, *v.inputs[0]->val, *v.inputs[1]->val));
 }
 
-
-Void ReinforceBackward(Var& v)
+void ReinforceBackward(Var& v)
 {
     Var* probs = v.inputs[0];
     Var* rt    = v.inputs[1];
@@ -147,13 +135,13 @@ Var* CreateNode(Arena& arena, ModelState& model, const VarType& type, Var* a, Va
     if (out == nullptr) { return nullptr; }
 
     out->type = &type;
-    for(u32 i = 0; i < type.num_inputs; i++) {
+    for (u32 i = 0; i < type.num_inputs; i++) {
         out->inputs[i] = inputs[i];
     }
     return out;
 }
 
-}
+} // namespace
 
 // ---------------------------------------------------------------- var types
 
@@ -189,7 +177,7 @@ const VarType ReinforceLoss = {
     .forward = ReinforceForward, .backward = ReinforceBackward,
 };
 
-}
+} // namespace var_type
 
 // ---------------------------------------------------------------- Var
 
@@ -211,7 +199,6 @@ Var* Var::Create(Arena& arena, ModelState& model, u32 rows, u32 cols, VarFlags f
     out->type = nullptr;
     return out;
 }
-
 
 // ---------------------------------------------------------------- ops
 
@@ -247,7 +234,7 @@ Var* ReinforceLoss(Arena& arena, ModelState& model, Var* probs, Var* rt)
     return CreateNode(arena, model, var_type::ReinforceLoss, probs, rt);
 }
 
-}
+} // namespace ops
 
 // ---------------------------------------------------------------- Graph
 
@@ -260,12 +247,11 @@ Graph Graph::Build(Arena& arena, const ModelState& model, Var* out_var)
     std::vector<u8>   visited(model.num_vars, 0);
     std::vector<Var*> stack;
     std::vector<Var*> order;
-    stack.reverse(model.num_vars);
-    order.reverse(model.num_vars);
-
+    stack.reserve(model.num_vars);
+    order.reserve(model.num_vars);
 
     stack.push_back(out_var);
-    while(!stack.empty()) {
+    while (!stack.empty()) {
         Var* cur = stack.back();
         stack.pop_back();
 
@@ -291,7 +277,7 @@ Graph Graph::Build(Arena& arena, const ModelState& model, Var* out_var)
     }
 
     Var** vars = arena.PushArrayUninit<Var*>(order.size());
-    if (var == nullptr) {
+    if (vars == nullptr) {
         return Graph{};
     }
     std::ranges::copy(order, vars);
@@ -308,13 +294,12 @@ void Graph::Forward() const
     }
 }
 
-
 bool Graph::Backward() const
 {
     if (Empty()) { return false; }
 
     Var* output = vars[size - 1];
-    if (!output -> RequiresGrad()) { return false; }
+    if (!output->RequiresGrad()) { return false; }
 
     for (Var* cur : Vars()) {
         if (cur->RequiresGrad() && !cur->IsParameter()) {
@@ -324,17 +309,15 @@ bool Graph::Backward() const
 
     output->grad->Fill(1.0f);
 
-    for(u32 i = size; i--; 0) {
-        Var* cur = vars[i]
+    for (u32 i = size; i-- > 0; ) {
+        Var* cur = vars[i];
         if (!cur->RequiresGrad()) { continue; }
-        if (curr->type != nullptr && cur->type->backward != nullptr) {
+        if (cur->type != nullptr && cur->type->backward != nullptr) {
             cur->type->backward(*cur);
         }
     }
     return true;
-
 }
-
 
 // ---------------------------------------------------------------- Model
 

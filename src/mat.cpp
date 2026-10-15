@@ -1,9 +1,10 @@
 #include "mat.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
-#include <prng.hpp>
+#include "prng.hpp"
 
 namespace {
 constexpr f32 kProbEpsilon = 1e-8f;
@@ -21,7 +22,7 @@ void MatMulKernel(Mat& out, const Mat& a, const Mat& b) noexcept
                                     : a.data[k + i * a.cols];
 
             for (u64 j = 0; j < n; j++) {
-                const f32 b_kj = TransA ? b.data[k + j * b.cols]
+                const f32 b_kj = TransB ? b.data[k + j * b.cols]
                                         : b.data[j + k * b.cols];
                     
                 out.data[j + i * n] += a_ik * b_kj;
@@ -30,8 +31,7 @@ void MatMulKernel(Mat& out, const Mat& a, const Mat& b) noexcept
     }
 }
 
-}
-
+} // namespace
 
 Mat* Mat::Create(Arena& arena, u32 rows, u32 cols) noexcept
 {
@@ -42,18 +42,15 @@ Mat* Mat::Create(Arena& arena, u32 rows, u32 cols) noexcept
     return arena.Emplace<Mat>(rows, cols, data);
 }
 
-
 void Mat::Clear() noexcept
 {
     std::ranges::fill(Span(), 0.0f);
 }
 
-
 void Mat::Fill(f32 x) noexcept
 {
     std::ranges::fill(Span(), x);
 }
-
 
 void Mat::Scale(f32 s) noexcept
 {
@@ -61,7 +58,6 @@ void Mat::Scale(f32 s) noexcept
         v *= s;
     }
 }
-
 
 void Mat::FillRand(f32 lower, f32 upper, Prng& rng)
 {
@@ -71,16 +67,14 @@ void Mat::FillRand(f32 lower, f32 upper, Prng& rng)
     }
 }
 
-
 void Mat::FillRand(f32 lower, f32 upper) 
 {
     FillRand(lower, upper, prng::Global());
 }
 
-
 namespace mat {
 
-bool Add(Mat& out, Mat& a, const Mat& b) noexcept
+bool Add(Mat& out, const Mat& a, const Mat& b) noexcept
 {
     if (!a.SameShape(b) || !out.SameShape(a)) {
         return false;
@@ -92,8 +86,7 @@ bool Add(Mat& out, Mat& a, const Mat& b) noexcept
     return true;
 }
 
-
-bool Sub(Mat& out, const Mat& a, const Mat& b) constexpr
+bool Sub(Mat& out, const Mat& a, const Mat& b) noexcept
 {
     if (!a.SameShape(b) || !out.SameShape(a)) {
         return false;
@@ -105,8 +98,7 @@ bool Sub(Mat& out, const Mat& a, const Mat& b) constexpr
     return true;
 }
 
-
-bool MatMUL(Mat& out, const Mat& a, const Mat& b,
+bool MatMul(Mat& out, const Mat& a, const Mat& b,
             bool zero_out, bool transpose_a, bool transpose_b) noexcept
 {
     const u32 a_rows = transpose_a ? a.cols : a.rows;
@@ -131,7 +123,6 @@ bool MatMUL(Mat& out, const Mat& a, const Mat& b,
     return true;
 }   
 
-
 bool Relu(Mat& out, const Mat& in) noexcept
 {
     if (!out.SameShape(in)) {
@@ -143,7 +134,6 @@ bool Relu(Mat& out, const Mat& in) noexcept
     }
     return true;
 }
-
 
 bool Softmax(Mat& out, const Mat& in) noexcept
 {
@@ -160,8 +150,8 @@ bool Softmax(Mat& out, const Mat& in) noexcept
         max_value = Max(max_value, in.data[i]);
     }
 
-    f32_sum = 0.0f;
-    for (u64 i = 0; i < size; i++){
+    f32 sum = 0.0f;
+    for (u64 i = 0; i < size; i++) {
         out.data[i] = std::exp(in.data[i] - max_value);
         sum += out.data[i];
     }
@@ -169,7 +159,6 @@ bool Softmax(Mat& out, const Mat& in) noexcept
     out.Scale(1.0f / sum);
     return true;
 }
-
 
 bool ReinforceLoss(Mat& out, const Mat& probs, const Mat& advantages) noexcept
 {
@@ -185,27 +174,25 @@ bool ReinforceLoss(Mat& out, const Mat& probs, const Mat& advantages) noexcept
     return true;
 }
 
-
 bool ReinforceAddGrad(Mat& prob_grads, const Mat& probs,
-                    const Mat& rt, const Mat& grad) noexcept
+                      const Mat& rt, const Mat& grad) noexcept
 {
     if (!probs.SameShape(rt)) { return false; }
     if (!grad.SameShape(probs)) { return false; }
-    if (!prob_grads.SameShape(probs)) {return false; }
+    if (!prob_grads.SameShape(probs)) { return false; }
 
     const u64 size = probs.Size();
     for (u64 i = 0; i < size; i++) {
-        const f32 p = Max(probd.data[i], kProbEpsilon);
+        const f32 p = Max(probs.data[i], kProbEpsilon);
         prob_grads.data[i] += grad.data[i] * (-rt.data[i] / p);
     }
 
     return true;
 }
 
-
 bool ReluAddGrad(Mat& out, const Mat& in, const Mat& grad) noexcept
 {
-    if (!out.SameShape(in) !! !out.SameShape(grad)) {
+    if (!out.SameShape(in) || !out.SameShape(grad)) {
         return false;
     }
     const u64 size = out.Size();
@@ -216,13 +203,12 @@ bool ReluAddGrad(Mat& out, const Mat& in, const Mat& grad) noexcept
     return true;
 }
 
-
 bool SoftmaxAddGrad(Mat& out, const Mat& softmax_out, const Mat& grad) noexcept
 {
     if (!out.SameShape(softmax_out) || !grad.SameShape(softmax_out)) {
         return false;
     }
-    const u64 size = softmax_out.Size()
+    const u64 size = softmax_out.Size();
 
     f32 dot = 0.0f;
     for (u64 i = 0; i < size; i++) {
@@ -235,5 +221,4 @@ bool SoftmaxAddGrad(Mat& out, const Mat& softmax_out, const Mat& grad) noexcept
     return true;
 }
 
-
-}
+} // namespace mat

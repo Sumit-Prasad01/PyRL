@@ -1,4 +1,4 @@
-#pargma once
+#pragma once
 
 #include "base.hpp"
 #include "prng.hpp"
@@ -23,7 +23,6 @@ struct Point {
     friend constexpr bool operator==(const Point&, const Point&) noexcept = default;
 };
 
-
 class SnakeEnv {
 public: 
     static constexpr f32 kFoodReward  = 20.0f;
@@ -35,7 +34,7 @@ public:
         bool done;
     };
 
-    explicit SnakeEnv(u32 grind_size, u64 seed = kDefaultSeed);
+    explicit SnakeEnv(u32 grid_size, u64 seed = kDefaultSeed);
 
     void Reset();
 
@@ -43,7 +42,7 @@ public:
 
     void EncodeState(Mat& out, Point snake, Point food, Action pov) const noexcept;
 
-    [[nodiscard]] bool IsGameOver() const noexcept { return OutofBounds(); }
+    [[nodiscard]] bool IsGameOver() const noexcept { return OutOfBounds(); }
 
     [[nodiscard]] u32   InputSize() const noexcept  { return 2 * grid_size_ + kNumDirections; }
     [[nodiscard]] Point Snake() const noexcept      { return snake_; }
@@ -57,7 +56,7 @@ public:
     [[nodiscard]] u32   GridSize() const noexcept   { return grid_size_; }
 
 private:
-    [[nodiscard]] bool OutofBounds() const noexcept;
+    [[nodiscard]] bool OutOfBounds() const noexcept;
     [[nodiscard]] Point RandomPoint(); 
     void PlaceFood();
     void Move(Action action) noexcept;

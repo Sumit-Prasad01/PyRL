@@ -6,11 +6,9 @@
 #include <limits>
 #include <random>
 
-#include <base.hpp>
+#include "base.hpp"
 
-
-
-class Prng{
+class Prng {
 public:
     using result_type = u32;
 
@@ -33,7 +31,7 @@ public:
         state_ = oldstate * kMultiplier + inc_;
         const u32 xorshifted = static_cast<u32>(((oldstate >> 18u) ^ oldstate) >> 27u);
         const int rot = static_cast<int>(oldstate >> 59u);
-        return std::rotr(xorshifted, rot)
+        return std::rotr(xorshifted, rot);
     }
 
     // Unbiased uniform integer in [0, range). Returns 0 if range == 0.
@@ -58,7 +56,7 @@ public:
     // Uniform f32 in [0, 1). Uses the top 24 bits (the full f32 mantissa).
     constexpr f32 NextFloat() noexcept
     {
-        return static_cast<f32>(Next() >> 8) * (1.0f / 16777216.0f) // 2^-24
+        return static_cast<f32>(Next() >> 8) * (1.0f / 16777216.0f); // 2^-24
     }
 
     // UniformRandomBitGenerator interface

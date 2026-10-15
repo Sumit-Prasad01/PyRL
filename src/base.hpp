@@ -2,7 +2,7 @@
 
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
-#enfif
+#endif
 
 #include <bit>
 #include <cassert>
@@ -34,18 +34,17 @@ static_assert(sizeof(f32) == 4, "f32 must be 4 bytes");
 static_assert(sizeof(f64) == 8, "f64 must be 8 bytes");
 
 // ---- Size helpers ----
-constexpr u64 KiB(u64 n) {return n << 10; }
-constexpr u64 KiB(u64 n) {return n << 20; }
-constexpr u64 KiB(u64 n) {return n << 30; }
+constexpr u64 KiB(u64 n) { return n << 10; }
+constexpr u64 MiB(u64 n) { return n << 20; }
+constexpr u64 GiB(u64 n) { return n << 30; }
 
 // ---- Min / Max ----
 // Functions instead of macros: arguments are evaluated once, and types are checked.
 template <typename T>
-constexpr T Min(T a, T b) {return a < b ? a : b; }
+constexpr T Min(T a, T b) { return a < b ? a : b; }
 
 template <typename T>
-constexpr T Max(T a, T b) {return a > b ? a : b; }
-
+constexpr T Max(T a, T b) { return a > b ? a : b; }
 
 // ---- Alignment ----
 // `align` must be a power of two.

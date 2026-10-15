@@ -8,12 +8,11 @@
 #include "env.hpp"
 #include "prng.hpp"
 
-
 struct TrainConfig {
     u32 epochs        = 2000;
     u32 rollout_size  = 64;
     u32 episode_len   = 100;
-    u32 gamma         = 0.99f;
+    f32 gamma         = 0.99f;
     f32 learning_rate = 0.05f;
 };
 
@@ -28,24 +27,21 @@ struct Transition {
     bool   done;
 };
 
-
 struct Trajectory {
     std::vector<Transition> transitions;
 };
 
-
-struct EpochsStats {
-    u32  epochs;
-    f32  average_return;
-    u32  foods_eaten;
-    u32  samples;
-    f32  return_std;
+struct EpochStats {
+    u32 epoch;
+    f32 average_return;
+    u32 foods_eaten;
+    u32 samples;
+    f32 return_std;
 };
 
-
-using EpochCallBack = std::function<void(const EpochsStats&)>;
+using EpochCallback = std::function<void(const EpochStats&)>;
 
 [[nodiscard]] Action SampleAction(const Mat& probs, Prng& rng);
 
-
-void Train(ModelState& model, SnakeEnv& env, const TrainConfig& config, Prng& rng, const EpochCallBack& on_epoch = {});
+void Train(ModelState& model, SnakeEnv& env, const TrainConfig& config, Prng& rng,
+           const EpochCallback& on_epoch = {});

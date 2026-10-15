@@ -8,7 +8,6 @@
 #include "prng.hpp"
 #include "train.hpp"
 
-
 int main() 
 {
     try {
@@ -30,8 +29,8 @@ int main()
                 s.epoch, s.average_return, s.foods_eaten, s.samples, s.return_std);
         });
         return EXIT_SUCCESS;
-    }catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         std::fprintf(stderr, "fatal: %s\n", e.what());
-        return EXIT_SUCCESS;
+        return EXIT_FAILURE;
     }
 }

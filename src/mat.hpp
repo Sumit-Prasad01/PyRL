@@ -18,7 +18,7 @@ class Prng;
 struct Mat {
     u32 rows;
     u32 cols;
-    f32 data;
+    f32* data;
 
     constexpr Mat(u32 r, u32 c, f32* d) noexcept : rows(r), cols(c), data(d) {}
 
@@ -26,8 +26,8 @@ struct Mat {
 
     [[nodiscard]] constexpr u64 Size() const noexcept { return u64{rows} * cols; }
 
-    [[nodiscard]] std::span<f32>         Span() noexcept          {return {data, Size()}; }
-    [[nodiscard]] std::span<const f32>   Span() const noexcept    {return {data, Size()}; }
+    [[nodiscard]] std::span<f32>         Span() noexcept          { return {data, Size()}; }
+    [[nodiscard]] std::span<const f32>   Span() const noexcept    { return {data, Size()}; }
 
     [[nodiscard]] f32& At(u32 r, u32 c) noexcept
     {
@@ -52,23 +52,22 @@ struct Mat {
     void FillRand(f32 lower, f32 upper, Prng& rng);
 };
 
-
 namespace mat {
 
 [[nodiscard]] bool Add(Mat& out, const Mat& a, const Mat& b) noexcept;
 [[nodiscard]] bool Sub(Mat& out, const Mat& a, const Mat& b) noexcept;
 
 [[nodiscard]] bool MatMul(Mat& out, const Mat& a, const Mat& b,
-                        bool zero_out = true,
-                        bool transpose_a = false,
-                        bool transpose_b = false) noexcept;
+                          bool zero_out = true,
+                          bool transpose_a = false,
+                          bool transpose_b = false) noexcept;
 
 [[nodiscard]] bool Relu(Mat& out, const Mat& in) noexcept;
 
 [[nodiscard]] bool Softmax(Mat& out, const Mat& in) noexcept;
 
 [[nodiscard]] bool ReinforceLoss(Mat& out, const Mat& probs,
-                                const Mat& advantages) noexcept;
+                                 const Mat& advantages) noexcept;
 
 [[nodiscard]] bool ReinforceAddGrad(Mat& prob_grads, const Mat& probs,
                                     const Mat& rt, const Mat& grad) noexcept;
@@ -76,5 +75,5 @@ namespace mat {
 [[nodiscard]] bool ReluAddGrad(Mat& out, const Mat& in, const Mat& grad) noexcept;
 
 [[nodiscard]] bool SoftmaxAddGrad(Mat& out, const Mat& softmax_out,
-                                const Mat& grad) noexcept;
+                                  const Mat& grad) noexcept;
 }

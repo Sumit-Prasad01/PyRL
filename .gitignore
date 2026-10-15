@@ -3,10 +3,23 @@
 *.swp
 *.swo
 
-# C build outputs
+# Build outputs
+build/
+build-*/
+out/
+.vs/
+coverage.xml
+*.gcda
+*.gcno
+
+# C/C++ outputs
 *.o
+*.obj
+*.exe
 *.out
 *.dSYM/
+*.pdb
+*.ilk
 
 # Local compiled binaries
 /main
@@ -17,7 +30,11 @@
 /exercise/autograd
 /exercise/mat
 
-# Generated MNIST data files
+# Generated data files
 /*.mat
-*.exe
-*.obj
+
+.github/
+implementation_plan.md
+RL_TEST_SUITE.md
+RL_PROJECT_ROADMAP.md
+RL_MASTER_PLAN.md
