@@ -140,4 +140,103 @@ template <typename T = f32>
 template <typename T = f32>
 [[nodiscard]] bool LogSoftmaxAddGrad(BasicMat<T>& out, const BasicMat<T>& log_softmax_out,
                                      const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool AddAddGrad(BasicMat<T>& grad_a, BasicMat<T>& grad_b,
+                              const BasicMat<T>& a, const BasicMat<T>& b,
+                              const BasicMat<T>& grad_out) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool SubAddGrad(BasicMat<T>& grad_a, BasicMat<T>& grad_b,
+                              const BasicMat<T>& a, const BasicMat<T>& b,
+                              const BasicMat<T>& grad_out) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Mul(BasicMat<T>& out, const BasicMat<T>& a, const BasicMat<T>& b) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool MulAddGrad(BasicMat<T>& grad_a, BasicMat<T>& grad_b,
+                              const BasicMat<T>& a, const BasicMat<T>& b,
+                              const BasicMat<T>& grad_out) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Div(BasicMat<T>& out, const BasicMat<T>& a, const BasicMat<T>& b) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool DivAddGrad(BasicMat<T>& grad_a, BasicMat<T>& grad_b,
+                              const BasicMat<T>& a, const BasicMat<T>& b,
+                              const BasicMat<T>& grad_out) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Tanh(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool TanhAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& out_val,
+                               const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Sigmoid(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool SigmoidAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& out_val,
+                                  const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LeakyRelu(BasicMat<T>& out, const BasicMat<T>& in, T alpha = T{0.01}) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LeakyReluAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& in,
+                                    const BasicMat<T>& grad, T alpha = T{0.01}) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Gelu(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool GeluAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& in,
+                               const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Exp(BasicMat<T>& out, const BasicMat<T>& in) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool ExpAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& out_val,
+                              const BasicMat<T>& grad) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Log(BasicMat<T>& out, const BasicMat<T>& in, T eps = T{1e-8}) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LogAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& in,
+                              const BasicMat<T>& grad, T eps = T{1e-8}) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Clip(BasicMat<T>& out, const BasicMat<T>& in, T min_val, T max_val) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool ClipAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& in,
+                               const BasicMat<T>& grad, T min_val, T max_val) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Sum(BasicMat<T>& out, const BasicMat<T>& in, i32 axis) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool SumAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& grad_out, i32 axis) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool Mean(BasicMat<T>& out, const BasicMat<T>& in, i32 axis) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool MeanAddGrad(BasicMat<T>& in_grad, const BasicMat<T>& grad_out, i32 axis) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LayerNorm(BasicMat<T>& out, const BasicMat<T>& in,
+                             const BasicMat<T>& gamma, const BasicMat<T>& beta,
+                             T eps = T{1e-5}) noexcept;
+
+template <typename T = f32>
+[[nodiscard]] bool LayerNormAddGrad(BasicMat<T>& in_grad, BasicMat<T>& gamma_grad,
+                                    BasicMat<T>& beta_grad, const BasicMat<T>& in,
+                                    const BasicMat<T>& gamma, const BasicMat<T>& grad_out,
+                                    T eps = T{1e-5}) noexcept;
+
 }

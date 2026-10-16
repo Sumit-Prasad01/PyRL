@@ -35,7 +35,7 @@ struct VarShape {
 };
 
 struct VarType {
-    using ShapeFn = std::optional<VarShape> (*)(const Var* a, const Var* b);
+    using ShapeFn = std::optional<VarShape> (*)(const Var* a, const Var* b, const Var* c);
     using PassFn  = void (*)(Var& var);
 
     const char* name;
@@ -55,10 +55,22 @@ extern const VarType MatMul;
 extern const VarType ReinforceLoss;
 extern const VarType LogProbLoss;
 extern const VarType CrossEntropy;
+extern const VarType Tanh;
+extern const VarType Sigmoid;
+extern const VarType LeakyRelu;
+extern const VarType Gelu;
+extern const VarType Exp;
+extern const VarType Log;
+extern const VarType Mul;
+extern const VarType Div;
+extern const VarType Clip;
+extern const VarType Sum;
+extern const VarType Mean;
+extern const VarType LayerNorm;
 }
 
 struct Var {
-    static constexpr u32 kMaxInputs = 2;
+    static constexpr u32 kMaxInputs = 3;
 
     u32            index;
     VarFlags       flags;
@@ -66,6 +78,9 @@ struct Var {
     Mat*           grad;
     const VarType* type;
     Var*           inputs[kMaxInputs];
+    f32            aux_param;
+    f32            aux_param2;
+    u32            aux_int;
 
     [[nodiscard]] static Var* Create(Arena& arena, ModelState& model, u32 rows, u32 cols,
                                      VarFlags flags = VarFlags::None) noexcept;
@@ -78,6 +93,32 @@ struct Var {
     operator Mat&() noexcept             { return *val; }
 };
 
+class GradMode {
+public:
+    [[nodiscard]] static bool IsEnabled() noexcept { return enabled_; }
+    static void SetEnabled(bool enabled) noexcept { enabled_ = enabled; }
+
+private:
+    static inline thread_local bool enabled_ = true;
+};
+
+class NoGradGuard {
+public:
+    NoGradGuard() noexcept : prev_(GradMode::IsEnabled())
+    {
+        GradMode::SetEnabled(false);
+    }
+    ~NoGradGuard() noexcept
+    {
+        GradMode::SetEnabled(prev_);
+    }
+    NoGradGuard(const NoGradGuard&)            = delete;
+    NoGradGuard& operator=(const NoGradGuard&) = delete;
+
+private:
+    bool prev_;
+};
+
 struct Graph {
     Var** vars;
     u32   size;
@@ -88,6 +129,7 @@ struct Graph {
 
     void Forward() const;
     [[nodiscard]] bool Backward() const;
+    void ZeroGrad() const noexcept;
 };
 
 struct ModelState {
@@ -115,6 +157,18 @@ namespace ops {
 [[nodiscard]] Var* ReinforceLoss(Arena& arena, ModelState& model, Var* probs, Var* rt);
 [[nodiscard]] Var* LogProbLoss(Arena& arena, ModelState& model, Var* log_probs, Var* target);
 [[nodiscard]] Var* CrossEntropy(Arena& arena, ModelState& model, Var* logits, Var* target);
+[[nodiscard]] Var* Tanh(Arena& arena, ModelState& model, Var* input);
+[[nodiscard]] Var* Sigmoid(Arena& arena, ModelState& model, Var* input);
+[[nodiscard]] Var* LeakyRelu(Arena& arena, ModelState& model, Var* input, f32 alpha = 0.01f);
+[[nodiscard]] Var* Gelu(Arena& arena, ModelState& model, Var* input);
+[[nodiscard]] Var* Exp(Arena& arena, ModelState& model, Var* input);
+[[nodiscard]] Var* Log(Arena& arena, ModelState& model, Var* input, f32 eps = 1e-8f);
+[[nodiscard]] Var* Mul(Arena& arena, ModelState& model, Var* a, Var* b);
+[[nodiscard]] Var* Div(Arena& arena, ModelState& model, Var* a, Var* b);
+[[nodiscard]] Var* Clip(Arena& arena, ModelState& model, Var* input, f32 min_val, f32 max_val);
+[[nodiscard]] Var* Sum(Arena& arena, ModelState& model, Var* input, i32 axis = -1);
+[[nodiscard]] Var* Mean(Arena& arena, ModelState& model, Var* input, i32 axis = -1);
+[[nodiscard]] Var* LayerNorm(Arena& arena, ModelState& model, Var* input, Var* gamma, Var* beta, f32 eps = 1e-5f);
 
 }
 

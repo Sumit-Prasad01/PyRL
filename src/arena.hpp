@@ -31,14 +31,16 @@ public:
     Arena(Arena&& other) noexcept
         : memory_(std::move(other.memory_)),
           capacity_(std::exchange(other.capacity_, 0)),
-          pos_(std::exchange(other.pos_, 0)) {}
+          pos_(std::exchange(other.pos_, 0)),
+          peak_used_(std::exchange(other.peak_used_, 0)) {}
 
     Arena& operator=(Arena&& other) noexcept
     {
         if (this != &other) {
-            memory_   = std::move(other.memory_);
-            capacity_ = std::exchange(other.capacity_, 0);
-            pos_      = std::exchange(other.pos_, 0);
+            memory_    = std::move(other.memory_);
+            capacity_  = std::exchange(other.capacity_, 0);
+            pos_       = std::exchange(other.pos_, 0);
+            peak_used_ = std::exchange(other.peak_used_, 0);
         }
         return *this;
     }
@@ -57,6 +59,9 @@ public:
 
         u8* out = memory_.get() + pos_aligned;
         pos_ = pos_aligned + size;
+        if (pos_ > peak_used_) {
+            peak_used_ = pos_;
+        }
 
         if (zero && size != 0) {
             std::memset(out, 0, size);
@@ -98,8 +103,30 @@ public:
     [[nodiscard]] u64 Capacity() const noexcept  { return capacity_; }
     [[nodiscard]] u64 Used() const noexcept      { return pos_; }
     [[nodiscard]] u64 Remaining() const noexcept { return capacity_ - pos_; }
+    [[nodiscard]] u64 PeakUsed() const noexcept  { return peak_used_; }
 
-    void Reset() noexcept { pos_ = 0; }
+    [[nodiscard]] u64 Save() const noexcept { return pos_; }
+
+    void Restore(u64 checkpoint) noexcept
+    {
+        assert(checkpoint <= pos_);
+#ifndef NDEBUG
+        if (checkpoint < pos_ && memory_) {
+            std::memset(memory_.get() + checkpoint, 0xCD, pos_ - checkpoint);
+        }
+#endif
+        pos_ = checkpoint;
+    }
+
+    void Reset() noexcept
+    {
+#ifndef NDEBUG
+        if (pos_ > 0 && memory_) {
+            std::memset(memory_.get(), 0xCD, pos_);
+        }
+#endif
+        pos_ = 0;
+    }
 
 private:
     struct AlignedDeleter {
@@ -139,4 +166,24 @@ private:
     std::unique_ptr<u8[], AlignedDeleter> memory_;
     u64 capacity_  = 0;
     u64 pos_       = 0;
+    u64 peak_used_ = 0;
 };
+
+class ScopedCheckpoint {
+public:
+    explicit ScopedCheckpoint(Arena& arena) noexcept
+        : arena_(arena), checkpoint_(arena.Save()) {}
+
+    ~ScopedCheckpoint() noexcept
+    {
+        arena_.Restore(checkpoint_);
+    }
+
+    ScopedCheckpoint(const ScopedCheckpoint&)            = delete;
+    ScopedCheckpoint& operator=(const ScopedCheckpoint&) = delete;
+
+private:
+    Arena& arena_;
+    u64    checkpoint_;
+};
+

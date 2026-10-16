@@ -72,6 +72,18 @@ public:
     static constexpr result_type min() noexcept { return std::numeric_limits<u32>::min(); }
     static constexpr result_type max() noexcept { return std::numeric_limits<u32>::max(); }
 
+    constexpr void GetState(u64& state, u64& inc) const noexcept
+    {
+        state = state_;
+        inc   = inc_;
+    }
+
+    constexpr void SetState(u64 state, u64 inc) noexcept
+    {
+        state_ = state;
+        inc_   = inc;
+    }
+
     friend constexpr bool operator==(const Prng&, const Prng&) noexcept = default;
 
 private:

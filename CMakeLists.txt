@@ -39,7 +39,8 @@ endfunction()
 # ---- library -------------------------------------------------------------
 add_library(rl_core STATIC
   src/arena.cpp src/prng.cpp src/mat.cpp src/autograd.cpp
-  src/env.cpp   src/model.cpp src/train.cpp)
+  src/env.cpp   src/model.cpp src/train.cpp src/optimizer.cpp
+  src/nn.cpp    src/serialize.cpp)
 target_include_directories(rl_core PUBLIC src)
 target_compile_features(rl_core PUBLIC cxx_std_20)
 rl_configure(rl_core)

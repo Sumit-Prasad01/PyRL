@@ -15,7 +15,12 @@ add_executable(rl_tests
   test_autograd.cpp
   test_gradcheck.cpp
   test_env.cpp
-  test_train.cpp)
+  test_train.cpp
+  test_tensor.cpp
+  test_dist.cpp
+  test_optimizer.cpp
+  test_nn.cpp
+  test_serialize.cpp)
 
 target_link_libraries(rl_tests PRIVATE rl_core Catch2::Catch2WithMain Threads::Threads)
 rl_configure(rl_tests)

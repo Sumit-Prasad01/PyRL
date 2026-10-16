@@ -6,6 +6,8 @@
 
 #include "env.hpp"
 #include "model.hpp"
+#include "nn.hpp"
+#include "optimizer.hpp"
 #include "train.hpp"
 #include "test_utils.hpp"
 
@@ -306,3 +308,71 @@ TEST_CASE("REINFORCE improves the average return on Snake", "[slow][learning]")
     INFO("early=" << early << " late=" << late);
     CHECK(late > early);
 }
+
+TEST_CASE("Gate: Batched MLP trains and converges on supervised toy task", "[train][batched][gate]")
+{
+    // Supervised 2-class classification with 16 samples per batch
+    constexpr u32 kBatchSize = 16;
+    constexpr u32 kInDim     = 2;
+    constexpr u32 kHiddenDim = 8;
+    constexpr u32 kOutDim    = 2;
+
+    Arena model_arena(MiB(1));
+    auto* model = ModelState::Create(model_arena);
+    Prng rng(42, 100);
+
+    // 2-layer MLP: Linear(2->8) -> ReLU -> Linear(8->2)
+    auto l1  = std::make_shared<nn::Linear>(model_arena, *model, kInDim, kHiddenDim, true, false, &rng, std::sqrt(2.0f));
+    auto act = std::make_shared<nn::ReLU>(model_arena, *model);
+    auto l2  = std::make_shared<nn::Linear>(model_arena, *model, kHiddenDim, kOutDim, true, false, &rng, 1.0f);
+    nn::Sequential net(l1, act, l2);
+
+    optim::Adam opt(net.Parameters(), { .lr = 0.05f });
+
+    // Generate fixed synthetic dataset of 16 samples
+    std::vector<f32> x_data(kBatchSize * kInDim);
+    std::vector<f32> y_data(kBatchSize * kOutDim, 0.0f);
+
+    for (u32 i = 0; i < kBatchSize; ++i) {
+        const bool is_class_1 = (i >= kBatchSize / 2);
+        const f32 center = is_class_1 ? 1.0f : -1.0f;
+        x_data[i * 2 + 0] = center + (rng.NextFloat() - 0.5f) * 0.4f;
+        x_data[i * 2 + 1] = center + (rng.NextFloat() - 0.5f) * 0.4f;
+        y_data[i * 2 + (is_class_1 ? 1 : 0)] = 1.0f;
+    }
+
+    f32 initial_loss = 0.0f;
+    f32 final_loss   = 0.0f;
+
+    for (u32 step = 0; step < 120; ++step) {
+        Arena step_arena(KiB(64));
+        opt.ZeroGrad();
+
+        Var* x = Var::Create(step_arena, *model, kBatchSize, kInDim);
+        std::memcpy(x->val->data, x_data.data(), x_data.size() * sizeof(f32));
+
+        Var* target = Var::Create(step_arena, *model, kBatchSize, kOutDim);
+        std::memcpy(target->val->data, y_data.data(), y_data.size() * sizeof(f32));
+
+        Var* logits = net.Forward(x);
+        Var* loss   = ops::CrossEntropy(step_arena, *model, logits, target);
+
+        Graph g = Graph::Build(step_arena, *model, loss);
+        g.Forward();
+        const f32 cur_loss = loss->val->At(0, 0);
+
+        if (step == 0) {
+            initial_loss = cur_loss;
+        }
+        final_loss = cur_loss;
+
+        REQUIRE(g.Backward());
+        opt.Step();
+    }
+
+    // Loss drops from initial ~0.7 to < 0.10 (over 80% drop)
+    CHECK(initial_loss > 0.4f);
+    CHECK(final_loss < 0.10f);
+    CHECK(final_loss < initial_loss * 0.20f);
+}
+

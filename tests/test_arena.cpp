@@ -153,3 +153,86 @@ TEST_CASE("Constructing an impossibly large arena throws", "[arena]")
 {
     REQUIRE_THROWS_AS(Arena(std::numeric_limits<u64>::max()), std::bad_alloc);
 }
+
+TEST_CASE("Arena tracks peak memory usage", "[arena]")
+{
+    Arena arena(1024);
+    CHECK(arena.PeakUsed() == 0);
+
+    const auto* p1 = arena.PushArray<f32>(10); // 40 bytes
+    REQUIRE(p1 != nullptr);
+    CHECK(arena.Used() == 40);
+    CHECK(arena.PeakUsed() == 40);
+
+    const auto* p2 = arena.PushArray<f32>(20); // 80 bytes => total 120
+    REQUIRE(p2 != nullptr);
+    CHECK(arena.Used() == 120);
+    CHECK(arena.PeakUsed() == 120);
+
+    arena.Reset();
+    CHECK(arena.Used() == 0);
+    CHECK(arena.PeakUsed() == 120); // Peak is retained after Reset
+
+    const auto* p3 = arena.PushArray<f32>(5); // 20 bytes
+    REQUIRE(p3 != nullptr);
+    CHECK(arena.Used() == 20);
+    CHECK(arena.PeakUsed() == 120); // Peak remains 120
+}
+
+TEST_CASE("Arena Save and Restore checkpoints", "[arena]")
+{
+    Arena arena(1024);
+    REQUIRE(arena.PushArray<u32>(10) != nullptr); // 40 bytes
+    const u64 checkpoint = arena.Save();
+    CHECK(checkpoint == 40);
+
+    REQUIRE(arena.PushArray<u32>(25) != nullptr); // 100 bytes => 140
+    CHECK(arena.Used() == 140);
+
+    arena.Restore(checkpoint);
+    CHECK(arena.Used() == 40);
+    CHECK(arena.Remaining() == 1024 - 40);
+}
+
+TEST_CASE("ScopedCheckpoint automatically restores position on scope exit", "[arena]")
+{
+    Arena arena(1024);
+    REQUIRE(arena.PushArray<f64>(5) != nullptr); // 40 bytes
+    CHECK(arena.Used() == 40);
+
+    {
+        ScopedCheckpoint sc(arena);
+        REQUIRE(arena.PushArray<f64>(10) != nullptr); // 80 bytes => 120
+        CHECK(arena.Used() == 120);
+    }
+
+    CHECK(arena.Used() == 40);
+}
+
+#ifndef NDEBUG
+TEST_CASE("Arena debug poisoning catches use of reset/restored memory", "[arena]")
+{
+    Arena arena(256);
+    auto* p = static_cast<u8*>(arena.Push(64, /*zero=*/false));
+    REQUIRE(p != nullptr);
+    std::memset(p, 0x12, 64);
+
+    arena.Reset();
+    // After Reset, memory is poisoned with 0xCD
+    CHECK(p[0] == 0xCD);
+    CHECK(p[63] == 0xCD);
+
+    // Save/Restore checkpoint poisoning
+    auto* q = static_cast<u8*>(arena.Push(32, /*zero=*/true));
+    REQUIRE(q != nullptr);
+    const u64 cp = arena.Save();
+    auto* r = static_cast<u8*>(arena.Push(32, /*zero=*/true));
+    REQUIRE(r != nullptr);
+    std::memset(r, 0x55, 32);
+
+    arena.Restore(cp);
+    CHECK(r[0] == 0xCD);
+    CHECK(r[31] == 0xCD);
+}
+#endif
+

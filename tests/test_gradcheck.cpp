@@ -349,3 +349,166 @@ TEST_CASE("Double precision finite difference gradchecks reach tight tolerance (
     }
 }
 
+TEST_CASE("Gradcheck: Tanh and Sigmoid", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* x = f.Leaf(3, 4, true, -1.5f, 1.5f);
+
+    SECTION("Tanh")
+    {
+        Var* y = Must(ops::Tanh(f.arena, *f.model, x));
+        ExpectGradientsMatch(f.Build(y), {x});
+    }
+    SECTION("Sigmoid")
+    {
+        Var* y = Must(ops::Sigmoid(f.arena, *f.model, x));
+        ExpectGradientsMatch(f.Build(y), {x});
+    }
+}
+
+TEST_CASE("Gradcheck: LeakyRelu and Gelu", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* x = f.Leaf(3, 4, true);
+
+    SECTION("LeakyRelu")
+    {
+        FillAwayFromZero(*x->val, f.rng);
+        Var* y = Must(ops::LeakyRelu(f.arena, *f.model, x, 0.05f));
+        ExpectGradientsMatch(f.Build(y), {x});
+    }
+    SECTION("Gelu")
+    {
+        Var* y = Must(ops::Gelu(f.arena, *f.model, x));
+        ExpectGradientsMatch(f.Build(y), {x});
+    }
+}
+
+TEST_CASE("Gradcheck: Exp and Log", "[gradcheck]")
+{
+    GraphFixture f;
+
+    SECTION("Exp")
+    {
+        Var* x = f.Leaf(3, 3, true, -1.0f, 1.0f);
+        Var* y = Must(ops::Exp(f.arena, *f.model, x));
+        ExpectGradientsMatch(f.Build(y), {x});
+    }
+    SECTION("Log")
+    {
+        Var* x = f.Leaf(3, 3, true, 0.5f, 3.0f);
+        Var* y = Must(ops::Log(f.arena, *f.model, x));
+        ExpectGradientsMatch(f.Build(y), {x});
+    }
+}
+
+TEST_CASE("Gradcheck: Mul and Div with Broadcasting", "[gradcheck]")
+{
+    GraphFixture f;
+
+    SECTION("Mul identical shapes")
+    {
+        Var* a = f.Leaf(3, 4, true, 0.5f, 2.0f);
+        Var* b = f.Leaf(3, 4, true, 0.5f, 2.0f);
+        Var* y = Must(ops::Mul(f.arena, *f.model, a, b));
+        ExpectGradientsMatch(f.Build(y), {a, b});
+    }
+    SECTION("Mul row broadcast [3, 4] * [1, 4]")
+    {
+        Var* a = f.Leaf(3, 4, true, 0.5f, 2.0f);
+        Var* b = f.Leaf(1, 4, true, 0.5f, 2.0f);
+        Var* y = Must(ops::Mul(f.arena, *f.model, a, b));
+        ExpectGradientsMatch(f.Build(y), {a, b});
+    }
+    SECTION("Div identical shapes")
+    {
+        Var* a = f.Leaf(3, 4, true, 0.5f, 2.0f);
+        Var* b = f.Leaf(3, 4, true, 1.0f, 3.0f);
+        Var* y = Must(ops::Div(f.arena, *f.model, a, b));
+        ExpectGradientsMatch(f.Build(y), {a, b});
+    }
+    SECTION("Div col broadcast [3, 4] / [3, 1]")
+    {
+        Var* a = f.Leaf(3, 4, true, 0.5f, 2.0f);
+        Var* b = f.Leaf(3, 1, true, 1.0f, 3.0f);
+        Var* y = Must(ops::Div(f.arena, *f.model, a, b));
+        ExpectGradientsMatch(f.Build(y), {a, b});
+    }
+}
+
+TEST_CASE("Gradcheck: Add and Sub with Broadcasting", "[gradcheck]")
+{
+    GraphFixture f;
+
+    SECTION("Add row broadcast (bias vector) [4, 5] + [1, 5]")
+    {
+        Var* x = f.Leaf(4, 5, true, -1.0f, 1.0f);
+        Var* b = f.Leaf(1, 5, true, -1.0f, 1.0f);
+        Var* y = Must(ops::Add(f.arena, *f.model, x, b));
+        ExpectGradientsMatch(f.Build(y), {x, b});
+    }
+    SECTION("Sub col broadcast [4, 5] - [4, 1]")
+    {
+        Var* x = f.Leaf(4, 5, true, -1.0f, 1.0f);
+        Var* b = f.Leaf(4, 1, true, -1.0f, 1.0f);
+        Var* y = Must(ops::Sub(f.arena, *f.model, x, b));
+        ExpectGradientsMatch(f.Build(y), {x, b});
+    }
+}
+
+TEST_CASE("Gradcheck: Clip", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* x = f.Leaf(3, 4, true, 0.5f, 2.5f);
+    Var* y = Must(ops::Clip(f.arena, *f.model, x, 0.0f, 3.0f));
+    ExpectGradientsMatch(f.Build(y), {x});
+}
+
+TEST_CASE("Gradcheck: Reductions (Sum and Mean)", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* x = f.Leaf(3, 4, true, -1.0f, 1.0f);
+
+    SECTION("Sum axis 0")
+    {
+        Var* s0 = Must(ops::Sum(f.arena, *f.model, x, 0));
+        ExpectGradientsMatch(f.Build(s0), {x});
+    }
+    SECTION("Sum axis 1")
+    {
+        Var* s1 = Must(ops::Sum(f.arena, *f.model, x, 1));
+        ExpectGradientsMatch(f.Build(s1), {x});
+    }
+    SECTION("Sum all")
+    {
+        Var* sa = Must(ops::Sum(f.arena, *f.model, x, -1));
+        ExpectGradientsMatch(f.Build(sa), {x});
+    }
+    SECTION("Mean axis 0")
+    {
+        Var* m0 = Must(ops::Mean(f.arena, *f.model, x, 0));
+        ExpectGradientsMatch(f.Build(m0), {x});
+    }
+    SECTION("Mean axis 1")
+    {
+        Var* m1 = Must(ops::Mean(f.arena, *f.model, x, 1));
+        ExpectGradientsMatch(f.Build(m1), {x});
+    }
+    SECTION("Mean all")
+    {
+        Var* ma = Must(ops::Mean(f.arena, *f.model, x, -1));
+        ExpectGradientsMatch(f.Build(ma), {x});
+    }
+}
+
+TEST_CASE("Gradcheck: LayerNorm", "[gradcheck]")
+{
+    GraphFixture f;
+    Var* x     = f.Leaf(3, 4, true, -1.0f, 1.0f);
+    Var* gamma = f.Leaf(1, 4, true, 0.5f, 1.5f);
+    Var* beta  = f.Leaf(1, 4, true, -0.5f, 0.5f);
+
+    Var* y = Must(ops::LayerNorm(f.arena, *f.model, x, gamma, beta));
+    ExpectGradientsMatch(f.Build(y), {x, gamma, beta});
+}
+

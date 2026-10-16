@@ -282,3 +282,52 @@ TEST_CASE("Graph::Build scales linearly on a large computation graph", "[autogra
     REQUIRE(g.Backward());
 }
 
+TEST_CASE("NoGradGuard suppresses gradient allocation", "[autograd]")
+{
+    GraphFixture f;
+    CHECK(GradMode::IsEnabled());
+
+    Var* with_grad = Var::Create(f.arena, *f.model, 2, 2, VarFlags::RequiresGrad);
+    REQUIRE(with_grad != nullptr);
+    CHECK(with_grad->RequiresGrad());
+    CHECK(with_grad->grad != nullptr);
+
+    {
+        NoGradGuard guard;
+        CHECK_FALSE(GradMode::IsEnabled());
+
+        Var* no_grad = Var::Create(f.arena, *f.model, 2, 2, VarFlags::RequiresGrad);
+        REQUIRE(no_grad != nullptr);
+        CHECK(no_grad->RequiresGrad()); // flag is preserved
+        CHECK(no_grad->grad == nullptr); // but no gradient memory is allocated
+    }
+
+    CHECK(GradMode::IsEnabled()); // restored after guard exit
+}
+
+TEST_CASE("Graph::ZeroGrad clears all active gradients in graph", "[autograd]")
+{
+    GraphFixture f;
+    Var* W = f.Param(2, 2);
+    Var* x = f.Leaf(2, 1, false);
+    x->val->Fill(1.0f);
+
+    Var* y = Must(ops::MatMul(f.arena, *f.model, W, x));
+    const Graph g = f.Build(y);
+    g.Forward();
+
+    REQUIRE(g.Backward());
+    // W->grad has non-zero values
+    bool has_nonzero = false;
+    for (f32 v : W->grad->Span()) {
+        if (v != 0.0f) has_nonzero = true;
+    }
+    CHECK(has_nonzero);
+
+    g.ZeroGrad();
+    for (f32 v : W->grad->Span()) {
+        CHECK(v == 0.0f);
+    }
+}
+
+
