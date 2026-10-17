@@ -79,6 +79,9 @@ add_library(rl_core STATIC
   src/env.cpp   src/model.cpp src/train.cpp src/optimizer.cpp
   src/nn.cpp    src/serialize.cpp src/device.cpp src/thread_pool.cpp
   src/matmul_ladder.cpp src/fused.cpp
+  src/envs/bandit.cpp src/envs/gridworld.cpp src/envs/cartpole.cpp
+  src/envs/mountain_car.cpp src/envs/pendulum.cpp src/envs/snake_v2.cpp
+  src/vec_env.cpp src/eval.cpp
   ${RL_CUDA_SOURCES})
 target_include_directories(rl_core PUBLIC src)
 target_compile_features(rl_core PUBLIC cxx_std_20)

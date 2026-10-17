@@ -21,7 +21,8 @@ add_executable(rl_tests
   test_optimizer.cpp
   test_nn.cpp
   test_serialize.cpp
-  test_perf.cpp)
+  test_perf.cpp
+  test_phase4.cpp)
 
 target_link_libraries(rl_tests PRIVATE rl_core Catch2::Catch2WithMain Threads::Threads)
 rl_configure(rl_tests)
