@@ -82,6 +82,9 @@ add_library(rl_core STATIC
   src/envs/bandit.cpp src/envs/gridworld.cpp src/envs/cartpole.cpp
   src/envs/mountain_car.cpp src/envs/pendulum.cpp src/envs/snake_v2.cpp
   src/vec_env.cpp src/eval.cpp
+  src/algorithms/buffer.cpp src/algorithms/policy.cpp
+  src/algorithms/reinforce.cpp src/algorithms/a2c.cpp
+  src/algorithms/ppo.cpp src/algorithms/dqn.cpp src/algorithms/sac.cpp
   ${RL_CUDA_SOURCES})
 target_include_directories(rl_core PUBLIC src)
 target_compile_features(rl_core PUBLIC cxx_std_20)

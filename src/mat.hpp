@@ -76,6 +76,13 @@ struct BasicMat {
         }
     }
 
+    void CopyFrom(const BasicMat& o) noexcept
+    {
+        if (data != nullptr && o.data != nullptr) {
+            std::memcpy(data, o.data, std::min(Size(), o.Size()) * sizeof(T));
+        }
+    }
+
     void FillRand(T lower, T upper);
     void FillRand(T lower, T upper, Prng& rng);
 };

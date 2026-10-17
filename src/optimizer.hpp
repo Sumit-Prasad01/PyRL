@@ -40,6 +40,7 @@ public:
 
     [[nodiscard]] f32 GetLr() const noexcept { return lr_; }
     void SetLr(f32 lr) noexcept { lr_ = lr; }
+    void SetLearningRate(f32 lr) noexcept { SetLr(lr); }
 
     [[nodiscard]] std::span<Var* const> Params() const noexcept { return params_; }
 
@@ -60,6 +61,7 @@ struct SGDConfig {
 class SGD : public Optimizer {
 public:
     SGD(std::vector<Var*> params, SGDConfig cfg);
+    SGD(std::vector<Var*> params, f32 lr) : SGD(std::move(params), SGDConfig{.lr = lr}) {}
     void Step() override;
     [[nodiscard]] OptimizerType Type() const noexcept override { return OptimizerType::SGD; }
 
@@ -85,6 +87,7 @@ struct RMSPropConfig {
 class RMSProp : public Optimizer {
 public:
     RMSProp(std::vector<Var*> params, RMSPropConfig cfg);
+    RMSProp(std::vector<Var*> params, f32 lr) : RMSProp(std::move(params), RMSPropConfig{.lr = lr}) {}
     void Step() override;
     [[nodiscard]] OptimizerType Type() const noexcept override { return OptimizerType::RMSProp; }
 
@@ -115,6 +118,7 @@ struct AdamConfig {
 class Adam : public Optimizer {
 public:
     Adam(std::vector<Var*> params, AdamConfig cfg);
+    Adam(std::vector<Var*> params, f32 lr) : Adam(std::move(params), AdamConfig{.lr = lr}) {}
     void Step() override;
     [[nodiscard]] OptimizerType Type() const noexcept override { return OptimizerType::Adam; }
     [[nodiscard]] const AdamConfig& Config() const noexcept { return cfg_; }
@@ -211,3 +215,5 @@ private:
 };
 
 } // namespace optim
+
+namespace optimizer = optim;
